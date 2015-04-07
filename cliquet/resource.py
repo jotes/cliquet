@@ -2,7 +2,7 @@ import re
 
 import colander
 from cornice import resource
-from cornice.schemas import CorniceSchema
+from cornice import schemas as cornice_schemas
 from pyramid.httpexceptions import (HTTPNotModified, HTTPPreconditionFailed,
                                     HTTPMethodNotAllowed,
                                     HTTPNotFound, HTTPConflict)
@@ -37,6 +37,20 @@ def crud(**kwargs):
 
         return resource.resource(**params)(klass)
     return wrapper
+
+
+class CorniceSchema(cornice_schemas.CorniceSchema):
+    def bind_attributes(self, request=None):
+        """Bypass schema binding on request. This is a costly operation and
+        becomes useful only when using Colander @deferred fields.
+
+        See `Cornice source code <http://git.io/veax9>`_.
+        """
+        return self.colander_schema.children
+
+    @classmethod
+    def from_colander(cls, colander_schema):
+        return CorniceSchema(colander_schema)
 
 
 class BaseResource(object):
