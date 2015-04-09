@@ -42,6 +42,10 @@ Feature settings
     # Force pagination *(recommended)*
     # cliquet.paginate_by = 200
 
+    # Custom record id generator class
+    # cliquet.id_generator = cliquet.storage.generators.UUID4
+
+
 Deployment
 ==========
 
