@@ -9,7 +9,8 @@ from pyramid.httpexceptions import (HTTPNotModified, HTTPPreconditionFailed,
 import six
 
 from cliquet import logger
-from cliquet.storage import exceptions as storage_exceptions, Filter, Sort
+from cliquet.storage import (exceptions as storage_exceptions, Filter, Sort,
+                             RECORD_ID_REGEXP)
 from cliquet.errors import (http_error, raise_invalid, ERRORS,
                             json_error_handler)
 from cliquet.schema import ResourceSchema
@@ -158,6 +159,7 @@ class BaseResource(object):
     @resource.view(permission='readonly', cors_headers=('Last-Modified',))
     def get(self):
         """Record `GET` endpoint."""
+        self._raise_400_if_invalid_id(self.record_id)
         self._add_timestamp_header(self.request.response)
         record = self.get_record(self.record_id)
         self._raise_304_if_not_modified(record)
@@ -168,6 +170,7 @@ class BaseResource(object):
     @resource.view(permission='readwrite')
     def put(self):
         """Record `PUT` endpoint."""
+        self._raise_400_if_invalid_id(self.record_id)
         try:
             existing = self.get_record(self.record_id)
             self._raise_412_if_modified(existing)
@@ -193,6 +196,7 @@ class BaseResource(object):
     @resource.view(permission='readwrite')
     def patch(self):
         """Record `PATCH` endpoint."""
+        self._raise_400_if_invalid_id(self.record_id)
         record = self.get_record(self.record_id)
         self._raise_412_if_modified(record)
 
@@ -213,6 +217,7 @@ class BaseResource(object):
     @resource.view(permission='readwrite')
     def delete(self):
         """Record `DELETE` endpoint."""
+        self._raise_400_if_invalid_id(self.record_id)
         record = self.get_record(self.record_id)
         self._raise_412_if_modified(record)
 
@@ -441,6 +446,19 @@ class BaseResource(object):
         """
         timestamp = six.text_type(self.timestamp).encode('utf-8')
         response.headers['Last-Modified'] = timestamp
+
+    def _raise_400_if_invalid_id(self, record_id):
+        """Raise 400 if specified record id does not match the format excepted
+        by storage backends.
+
+        :raises: :class:`pyramid.httpexceptions.HTTPBadRequest`
+        """
+        if not RECORD_ID_REGEXP.match(record_id):
+            error_details = {
+                'location': 'path',
+                'description': "Invalid record id"
+            }
+            raise_invalid(self.request, **error_details)
 
     def _raise_304_if_not_modified(self, record=None):
         """Raise 304 if current timestamp is inferior to the one specified
