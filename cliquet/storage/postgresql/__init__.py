@@ -123,7 +123,7 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
 
     """
 
-    schema_version = 4
+    schema_version = 5
 
     def __init__(self, *args, **kwargs):
         self._max_fetch_size = kwargs.pop('max_fetch_size')
@@ -278,8 +278,11 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
           FROM records
          WHERE id = %(record_id)s
            AND user_id = %(user_id)s
+           AND resource_name = %(resource_name)s;
         """
-        placeholders = dict(record_id=record_id, user_id=user_id)
+        placeholders = dict(record_id=record_id,
+                            user_id=user_id,
+                            resource_name=resource.name)
         with self.connect(readonly=True) as cursor:
             cursor.execute(query, placeholders)
             if cursor.rowcount == 0:
@@ -304,6 +307,7 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
         UPDATE records SET data=%(data)s::json
         WHERE id = %(record_id)s
            AND user_id = %(user_id)s
+           AND resource_name = %(resource_name)s
         RETURNING as_epoch(last_modified) AS last_modified;
         """
         placeholders = dict(record_id=record_id,
@@ -320,6 +324,7 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
             SELECT id FROM records
             WHERE id = %(record_id)s
               AND user_id = %(user_id)s
+              AND resource_name = %(resource_name)s;
             """
             cursor.execute(query, placeholders)
             query = query_update if cursor.rowcount > 0 else query_create
@@ -339,6 +344,7 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
             FROM records
             WHERE id = %(record_id)s
               AND user_id = %(user_id)s
+              AND resource_name = %(resource_name)s
             RETURNING id
         )
         INSERT INTO deleted (id, user_id, resource_name)
@@ -478,7 +484,7 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
             placeholders.update(**holders)
 
         if limit:
-            assert isinstance(limit, six.integer_types)  # validated in view
+            assert isinstance(limit, six.integer_types)  # asserted in resource
             safeholders['pagination_limit'] = 'LIMIT %s' % limit
 
         with self.connect(readonly=True) as cursor:
@@ -521,11 +527,19 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
         holders = {}
         for i, filtr in enumerate(filters):
             value = filtr.value
+            sql_operator = operators.setdefault(filtr.operator, filtr.operator)
+
+            if filtr.field == resource.modified_field:
+                # Value is integer (asserted in resource).
+                assert isinstance(filtr.value, six.integer_types)
+                # Bypass field and value escaping in order to use a function.
+                cond = "last_modified %s from_epoch(%s)" % (sql_operator,
+                                                            filtr.value)
+                conditions.append(cond)
+                continue
 
             if filtr.field == resource.id_field:
                 sql_field = 'id'
-            elif filtr.field == resource.modified_field:
-                sql_field = 'as_epoch(last_modified)'
             else:
                 # Safely escape field name
                 field_holder = '%s_field_%s' % (prefix, i)
@@ -541,7 +555,6 @@ class PostgreSQL(PostgreSQLClient, StorageBase):
             value_holder = '%s_value_%s' % (prefix, i)
             holders[value_holder] = value
 
-            sql_operator = operators.setdefault(filtr.operator, filtr.operator)
             cond = "%s %s %%(%s)s" % (sql_field, sql_operator, value_holder)
             conditions.append(cond)
 
