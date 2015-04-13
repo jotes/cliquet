@@ -58,10 +58,10 @@ class ResourceSchema(colander.MappingSchema):
                 class Options:
                     unique_fields = ('url',)
         """
-        readonly_fields = ('id', 'last_modified')
+        readonly_fields = tuple()
         """Fields that cannot be updated"""
 
-        unique_fields = ('id', 'last_modified')
+        unique_fields = tuple()
         """Fields that must have unique values for the user collection"""
 
         preserve_unknown = False
