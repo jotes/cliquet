@@ -43,8 +43,6 @@ class ResourceSchema(colander.MappingSchema):
         class Movie(ResourceSchema):
             director = colander.SchemaNode(colander.String())
     """
-    id = colander.SchemaNode(colander.String(), missing=colander.drop)
-    last_modified = TimeStamp()
 
     class Options:
         """
